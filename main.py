@@ -75,11 +75,11 @@ def get_or_create_session(session_id: str) -> dict[str, Any]:
 
 @app.get("/callback")
 async def oauth_callback(
-    session: str = Query(..., description="Session ID from local app"),
+    session: str | None = Query(None, description="Session ID from local app"),
     code: str | None = Query(None, description="OAuth authorization code"),
     error: str | None = Query(None, description="OAuth error"),
     error_description: str | None = Query(None, description="Error description"),
-    state: str | None = Query(None, description="OAuth state parameter"),
+    state: str | None = Query(None, description="OAuth state parameter (used as session ID)"),
 ) -> HTMLResponse:
     """Receive OAuth callback from Google and transmit to local app.
 
@@ -87,25 +87,51 @@ async def oauth_callback(
     The authorization code is stored temporarily and transmitted to the local
     app via WebSocket or HTTP polling.
 
+    The session ID can be passed either via:
+    - `session` query parameter (legacy/direct)
+    - `state` parameter (OAuth standard, used by Google)
+
     Args:
-        session: Unique session ID to match with local app.
+        session: Unique session ID to match with local app (optional).
         code: OAuth authorization code (on success).
         error: OAuth error code (on failure).
         error_description: Human-readable error description.
-        state: OAuth state parameter (for additional security if needed).
+        state: OAuth state parameter, used as session ID when session is not provided.
 
     Returns:
         HTML page confirming success or failure to the user.
     """
     cleanup_expired_sessions()
 
-    session_data = get_or_create_session(session)
+    # Use session if provided, otherwise use state as session ID
+    session_id = session or state
+    if not session_id:
+        return HTMLResponse(
+            """
+            <!DOCTYPE html>
+            <html><head>
+            <meta charset="utf-8">
+            <title>Erreur</title>
+            <style>
+                body { font-family: sans-serif; text-align: center; padding: 50px; }
+                .error { color: #dc2626; }
+            </style>
+            </head>
+            <body>
+            <h1 class="error">Erreur: Session manquante</h1>
+            <p>Aucun identifiant de session fourni.</p>
+            </body></html>
+            """,
+            status_code=400,
+        )
+
+    session_data = get_or_create_session(session_id)
 
     if code:
         session_data["code"] = code
         # Notify WebSocket clients immediately
-        if session in ws_connections:
-            for ws in ws_connections[session]:
+        if session_id in ws_connections:
+            for ws in ws_connections[session_id]:
                 try:
                     await ws.send_json({"code": code, "status": "success"})
                 except Exception:
@@ -143,8 +169,8 @@ async def oauth_callback(
         error_msg = error_description or error
         session_data["error"] = error_msg
         # Notify WebSocket clients of error
-        if session in ws_connections:
-            for ws in ws_connections[session]:
+        if session_id in ws_connections:
+            for ws in ws_connections[session_id]:
                 try:
                     await ws.send_json({"error": error_msg, "status": "error"})
                 except Exception:
