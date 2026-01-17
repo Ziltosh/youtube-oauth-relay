@@ -1,0 +1,37 @@
+# OAuth Relay Service - Docker Compose
+# For deployment with Coolify or standalone Docker
+
+version: '3.8'
+
+services:
+  oauth-relay:
+    build: .
+    container_name: oauth-relay
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Resource limits for lightweight deployment
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+# Notes for Coolify deployment:
+# 1. Create a new service pointing to this repository
+# 2. Set the domain to your desired subdomain (e.g., oauth.yourdomain.com)
+# 3. Enable HTTPS (Let's Encrypt will be auto-configured)
+# 4. Deploy - that's it!
+#
+# The relay service will be available at https://oauth.yourdomain.com
