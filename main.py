@@ -209,6 +209,9 @@ async def poll_session(session_id: str) -> dict[str, Any]:
     Local apps can poll this endpoint to check if the OAuth code has arrived.
     Once the code is retrieved, the session is automatically deleted for privacy.
 
+    The session is auto-created on first poll if it doesn't exist, allowing
+    the client to start polling before the OAuth callback arrives.
+
     Args:
         session_id: The session ID to check.
 
@@ -217,16 +220,11 @@ async def poll_session(session_id: str) -> dict[str, Any]:
         - {"status": "waiting"} if no code yet
         - {"code": "..."} on success
         - {"error": "..."} on OAuth error
-
-    Raises:
-        HTTPException: 404 if session not found or expired.
     """
     cleanup_expired_sessions()
 
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found or expired")
-
-    session_data = sessions[session_id]
+    # Auto-create session if it doesn't exist (allows polling before callback)
+    session_data = get_or_create_session(session_id)
 
     if session_data["code"]:
         code = session_data["code"]
