@@ -6,9 +6,10 @@ version: '3.8'
 services:
   oauth-relay:
     build: .
-    container_name: oauth-relay
-    ports:
-      - "8000:8000"
+    # Don't expose ports directly - Coolify handles reverse proxy
+    # For standalone Docker, uncomment: ports: ["8000:8000"]
+    expose:
+      - "8000"
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
